@@ -1,9 +1,54 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import axios from "npm:axios"
 import { JSDOM } from "npm:jsdom"
+import { Client } from "npm:@googlemaps/google-maps-services-js"
+import { v4 } from "npm:uuid"
+import { parse } from "npm:date-fns"
 
 const TARGET_URL = 'https://www.londonspuds.com.au/locations';
 const DATE_PATTERN = /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday) \d{1,2} (January|February|March|April|May|June|July|August|September|October|November|December) \d{4}$/;
+
+const apiKey = Deno.env.get('GOOGLE_MAPS_API_KEY')
+const mapsClient = new Client({})
+
+async function geocodeAddress(address) {
+  const response = await mapsClient.geocode({
+    params: {
+      address,
+      key: apiKey
+    }
+  });
+
+  if(response.data.status === 'OK' && response.data.results.length > 0) {
+    const { lat, lng } = response.data.results[0].geometry.location;
+    return { lat, lng };
+  } else {
+    throw new Error(`Geocoding failed: ${response.data.status}`)
+  }
+}
+
+async function createLocation(locSchedule) {
+  const coords = await geocodeAddress(locSchedule.address);
+  return {
+    id: v4(),
+    lat: coords.lat,
+    lng: coords.lng,
+    address: locSchedule.address,
+  }
+}
+
+const formats = [
+  'EEEE d MMMM yyyy ha',     // e.g. Friday 15 August 2025 11am
+  'EEEE d MMMM yyyy h:mma',  // e.g. Friday 15 August 2025 7:30pm
+];
+
+function parseFlexibleDate(dateTime) {
+  for (const fmt of formats) {
+    const parsed = parse(dateTime, fmt, new Date());
+    if (!isNaN(parsed)) return parsed;
+  }
+  return null; // could not parse
+}
 
 function parseEntry(entry) {
   entry = entry.replace(/\u200b/g, "").trim();
@@ -34,20 +79,40 @@ Deno.serve(async (_req) => {
     const liTexts = Array.from(ul.querySelectorAll('li'))
       .map(li => li.textContent.trim())
       .map(parseEntry)
-      .filter(Boolean);
+      .filter((item) => Boolean(item.address));
     locationSchedules.push(liTexts);
   }
 
-  const schedule = {};
+  const daySchedule = {};
+  const locations = {};
+
   for(let i = 0; i < days.length; i++) {
-    schedule[days[i]] = locationSchedules[i];
+    daySchedule[days[i]] = await Promise.all(locationSchedules[i].map(async (locSched) => {
+      let location = locations[locSched.address];
+      if(!location) {
+        location = await createLocation(locSched);
+        locations[location.address] = location;
+      }
+      return {
+        locationRef: location.id,
+        startTime: locSched.startTime,
+        endTime: locSched.endTime,
+      };
+    }));
   }
 
-  const locations = new Set(locationSchedules.flat().map(l => l.address))
+  const schedule = Object.keys(daySchedule).flatMap((day) => {
+    const dayLocations = daySchedule[day];
+    return dayLocations.map(loc => ({
+      ...loc,
+      startTime: parseFlexibleDate(`${day} ${loc.startTime}`),
+      endTime: parseFlexibleDate(`${day} ${loc.endTime}`),
+    }))
+  })
 
   return new Response(
     JSON.stringify({
-      locations: [...locations],
+      locations: Object.values(locations),
       schedule
     }),
     { headers: { "Content-Type": "application/json" } },
