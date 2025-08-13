@@ -10,9 +10,9 @@ CREATE POLICY "Public can read locations" ON public.locations FOR SELECT USING(t
 
 CREATE TABLE schedules (
    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-   locationRef UUID NOT NULL references locations (id),
-   startTime TIMESTAMP NOT NULL,
-   endTime TIMESTAMP NOT NULL
+   location_ref UUID NOT NULL references locations (id),
+   start_time TIMESTAMP NOT NULL,
+   end_time TIMESTAMP NOT NULL
 );
 
 ALTER TABLE public.schedules ENABLE ROW LEVEL SECURITY;
