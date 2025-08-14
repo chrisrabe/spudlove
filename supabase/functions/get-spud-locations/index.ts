@@ -31,6 +31,33 @@ async function geocodeAddress(address) {
   }
 }
 
+const formats = [
+  'EEEE d MMMM yyyy ha',     // e.g. Friday 15 August 2025 11am
+  'EEEE d MMMM yyyy h:mma',  // e.g. Friday 15 August 2025 7:30pm
+];
+
+function parseFlexibleDate(dateTime) {
+  for (const fmt of formats) {
+    const parsed = parse(dateTime, fmt, new Date());
+    if (!isNaN(parsed)) return parsed;
+  }
+  return null; // could not parse
+}
+
+function parseEntry(entry) {
+  entry = entry.replace(/\u200b/g, "").trim();
+
+  const pattern = /^(.+?)\s+(\d{1,2}(?::\d{2})?(?:am|pm))\s*-\s*(\d{1,2}(?::\d{2})?(?:am|pm))/i;
+  const match = entry.match(pattern);
+
+  if (!match) {
+    return { address: null, startTime: null, endTime: null };
+  }
+
+  const [, address, startTime, endTime] = match;
+  return { address: address.trim(), startTime, endTime };
+}
+
 async function createLocation(locSchedule) {
   const { data: existingLoc, error: selectError } = await supabase
     .from('locations')
@@ -63,31 +90,35 @@ async function createLocation(locSchedule) {
   return locations[0]
 }
 
-const formats = [
-  'EEEE d MMMM yyyy ha',     // e.g. Friday 15 August 2025 11am
-  'EEEE d MMMM yyyy h:mma',  // e.g. Friday 15 August 2025 7:30pm
-];
+async function createSchedules(scheduleData) {
+  return await Promise.all(scheduleData.map(async (data) => {
+    // Check if there is an existing schedule created already
+    const {data: existingSched} = await supabase
+      .from('schedules')
+      .select()
+      .match({
+        location_ref: data.locationRef,
+        start_time: data.startTime.toISOString(),
+        end_time: data.endTime.toISOString(),
+      })
+      .maybeSingle();
 
-function parseFlexibleDate(dateTime) {
-  for (const fmt of formats) {
-    const parsed = parse(dateTime, fmt, new Date());
-    if (!isNaN(parsed)) return parsed;
-  }
-  return null; // could not parse
-}
+    if(existingSched) {
+      return existingSched;
+    }
 
-function parseEntry(entry) {
-  entry = entry.replace(/\u200b/g, "").trim();
+    const {data: newSchedule} = await supabase
+      .from('schedules')
+      .insert({
+        location_ref: data.locationRef,
+        start_time: data.startTime,
+        end_time: data.endTime,
+      })
+      .select()
+      .single()
 
-  const pattern = /^(.+?)\s+(\d{1,2}(?::\d{2})?(?:am|pm))\s*-\s*(\d{1,2}(?::\d{2})?(?:am|pm))/i;
-  const match = entry.match(pattern);
-
-  if (!match) {
-    return { address: null, startTime: null, endTime: null };
-  }
-
-  const [, address, startTime, endTime] = match;
-  return { address: address.trim(), startTime, endTime };
+    return newSchedule;
+  }));
 }
 
 Deno.serve(async (_req) => {
@@ -127,7 +158,7 @@ Deno.serve(async (_req) => {
     }));
   }
 
-  const schedule = Object.keys(daySchedule).flatMap((day) => {
+  const scheduleData = Object.keys(daySchedule).flatMap((day) => {
     const dayLocations = daySchedule[day];
     return dayLocations.map(loc => ({
       ...loc,
@@ -135,6 +166,8 @@ Deno.serve(async (_req) => {
       endTime: parseFlexibleDate(`${day} ${loc.endTime}`),
     }))
   })
+
+  const schedule = await createSchedules(scheduleData);
 
   return new Response(
     JSON.stringify({
