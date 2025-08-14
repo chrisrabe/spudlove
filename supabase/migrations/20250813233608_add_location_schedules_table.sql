@@ -1,7 +1,8 @@
 CREATE TABLE locations (
-   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-   lat DECIMAL(9,6) NOT NULL,
-   lng DECIMAL(9,6) NOT NULL
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    lat DECIMAL(9,6) NOT NULL,
+    lng DECIMAL(9,6) NOT NULL,
+    address TEXT UNIQUE NOT NULL
 );
 
 ALTER TABLE public.locations ENABLE ROW LEVEL SECURITY;
