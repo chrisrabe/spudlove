@@ -2,14 +2,18 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import axios from "npm:axios"
 import { JSDOM } from "npm:jsdom"
 import { Client } from "npm:@googlemaps/google-maps-services-js"
-import { v4 } from "npm:uuid"
 import { parse } from "npm:date-fns"
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const TARGET_URL = 'https://www.londonspuds.com.au/locations';
 const DATE_PATTERN = /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday) \d{1,2} (January|February|March|April|May|June|July|August|September|October|November|December) \d{4}$/;
 
 const apiKey = Deno.env.get('GOOGLE_MAPS_API_KEY')
 const mapsClient = new Client({})
+const supabase = createClient(
+  Deno.env.get('SUPABASE_URL'),
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
+)
 
 async function geocodeAddress(address) {
   const response = await mapsClient.geocode({
@@ -28,13 +32,35 @@ async function geocodeAddress(address) {
 }
 
 async function createLocation(locSchedule) {
-  const coords = await geocodeAddress(locSchedule.address);
-  return {
-    id: v4(),
-    lat: coords.lat,
-    lng: coords.lng,
-    address: locSchedule.address,
+  const { data: existingLoc, error: selectError } = await supabase
+    .from('locations')
+    .select()
+    .eq('address', locSchedule.address)
+    .maybeSingle();
+
+  if(selectError) {
+    throw new Error(`Failed to check existing location: ${selectError.message}`);
   }
+
+  if(existingLoc) {
+    return existingLoc;
+  }
+
+  const coords = await geocodeAddress(locSchedule.address);
+  const { data: locations, error: insertError } = await supabase
+    .from('locations')
+    .insert({
+      lat: coords.lat,
+      lng: coords.lng,
+      address: locSchedule.address,
+    })
+    .select();
+
+  if(insertError) {
+    throw new Error(`Failed to create location: ${insertError.message}`);
+  }
+
+  return locations[0]
 }
 
 const formats = [
