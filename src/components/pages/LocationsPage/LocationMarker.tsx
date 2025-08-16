@@ -1,6 +1,7 @@
 import { AdvancedMarker } from "@vis.gl/react-google-maps";
 import React, { useState } from "react";
 import logoUrl from "@/assets/london-spuds-logo.svg?url";
+import { parseISO, format } from "date-fns";
 
 interface LocationMarkerProps {
   lat: number;
@@ -10,6 +11,19 @@ interface LocationMarkerProps {
   endTime: string;
 }
 
+const getReadableDate = (startTime: string, endTime: string) => {
+  const start = parseISO(startTime);
+  const end = parseISO(endTime);
+  const startFormatted = format(start, "MMMM d yyyy h:mmaaa").replace(
+    ":00",
+    "",
+  );
+  const endFormatted = format(end, "h:mmaaa")
+    .replace(":00", "")
+    .replace(":", ".");
+  return `${startFormatted} - ${endFormatted}`;
+};
+
 const LocationMarker: React.FC<LocationMarkerProps> = ({
   lat,
   lng,
@@ -18,7 +32,13 @@ const LocationMarker: React.FC<LocationMarkerProps> = ({
   endTime,
 }) => {
   const [showBubble, setShowBubble] = useState(false);
-  const date = `${startTime} - ${endTime}`; // TODO: Format this
+  const date = getReadableDate(startTime, endTime);
+
+  const openDirections = () => {
+    const encodedAddress = encodeURIComponent(address);
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${encodedAddress}`;
+    window.open(url, "_blank");
+  };
 
   return (
     <AdvancedMarker position={{ lat, lng }}>
@@ -42,20 +62,27 @@ const LocationMarker: React.FC<LocationMarkerProps> = ({
                   alt="london spuds logo"
                   className="w-20 h-20"
                 />
-                <a className="text-center underline text-blue-800">
+                <a
+                  className="text-center underline text-blue-800"
+                  href="https://www.londonspuds.com.au/"
+                  target="_blank"
+                >
                   View website
                 </a>
               </div>
               <div className="p-3 space-y-2">
                 <div>
                   <p className="text-lg font-bold">{address}</p>
-                  <p>{date}</p>
+                  <p className="text-sm">{date}</p>
                 </div>
-                <div className="inline-flex gap-2">
-                  <button className="p-2 bg-black text-white rounded-lg cursor-pointer">
+                <div className="inline-flex gap-2 justify-end w-full">
+                  <button className="p-2 bg-black text-white text-sm rounded-lg cursor-pointer">
                     Notify Me
                   </button>
-                  <button className="p-2 border border-black rounded-lg">
+                  <button
+                    className="p-2 border border-black text-sm rounded-lg cursor-pointer"
+                    onClick={openDirections}
+                  >
                     Get Directions
                   </button>
                 </div>

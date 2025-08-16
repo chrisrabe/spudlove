@@ -4,7 +4,7 @@ import LocationMarker from "./LocationMarker.tsx";
 
 const LocationsMap: React.FC = () => {
   return (
-    <div style={{ height: "100vh", width: "100%" }}>
+    <div style={{ height: "100%", width: "100%" }}>
       <APIProvider apiKey={import.meta.env.VITE_MAPS_API_KEY}>
         <Map
           defaultCenter={{ lat: -27.4698, lng: 153.0251 }} // Brisbane
@@ -26,11 +26,11 @@ const LocationsMap: React.FC = () => {
           }}
         >
           <LocationMarker
-            lat={-27.4698}
-            lng={153.0251}
-            address="Some address"
-            startTime={"August 13 2025 4.30pm"}
-            endTime={"7pm"}
+            lat={-27.530368}
+            lng={153.096672}
+            address="London Spuds HQ - 20 Devlan St, Mansfield"
+            startTime={"2025-08-11T11:00:00"}
+            endTime={"2025-08-11T13:30:00"}
           />
         </Map>
       </APIProvider>
